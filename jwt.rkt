@@ -12,14 +12,89 @@
              [secret : String])
   #:transparent)
 
+;; HeaderParam represents a JSON Header Parameter.
+;; From https://tools.ietf.org/html/draft-ietf-jose-json-web-signature-41
+;; (JOSE Working Group draft paper on JSON Web Signature (JWS), 16 Jan 2015).
+;; XXX Expires on 20 Jul 2015.
+(define-type HeaderParam
+  (U 'alg ; Algorithm - MUST be present
+     'jku ; JWK Set URL  - OPTIONAL
+     'jwk ; JSON Web Key - OPTIONAL
+     'kid ; Key ID       - OPTIONAL, value MUST be a case-sensitive string
+     'x5u ; X.509 URL    - OPTIONAL
+     'x5c ; X.509 Cert/Chain - OPTIONAL; we MUST validate (RFC5280) if present
+          ; Corresponds to the key used to sign the JWS.
+     'x5t ; X.509 Cert SHA-1 Thumbprint - OPTIONAL
+     'x5t#S256 ; X.509 Certificate SHA-256 Thumbprint - OPTIONAL
+     'typ ; MIME Media Type of JWS - OPTIONAL
+     'cty ; Content Type (MIME type of payload) - OPTIONAL
+     'crit ; Critical - OPTIONAL, but indicates extensions are being used
+           ; that MUST be understood by our impl; if not, the JWS is invalid.
+     ))
+
+(: valid-jwt? (->* (String) (#:supported-header-params (Listof HeaderParam))
+                   Boolean))
+(define (valid-jwt? s
+                    #:supported-header-params [supported-header-params
+                                               '(alg kid)])
+  (let/ec fail : False
+    (unless (regexp-match #rx"\\." s)
+      (fail #f))
+    (when (regexp-match #px"\\s" s)
+      (fail #f))
+    
+    (with-handlers ([exn:fail:contract? (lambda (e) (fail #f))]
+                    [exn:fail:read? (lambda (e) (fail #f))])
+      (match (string-split s ".")
+        [(list h p s)
+         (define h/end (try-decoding h))
+         (when (eof-object? h/end) (fail #f))
+         (define p/end (try-decoding p))
+         (when (eof-object? p/end) (fail #f))
+         ;; TODO:
+         ;; - verify that we understand and can process all fields required
+         ;;   by the JWS spec, the algorithm designated in the header, and
+         ;;   the 'crit header parameter (if present), and that the fields'
+         ;;   values are all understood & supported.
+         (define sig (base64-decode (string->bytes/utf-8 s)))
+         #| TODO:
+        Validate the JWS Signature against the JWS Signing Input
+        ASCII(BASE64URL(UTF8(JWS Protected Header)) || '.' ||
+        BASE64URL(JWS Payload)) -- that's (string-append h "." p) here --
+        in the manner defined for the algorithm
+        being used, which MUST be accurately represented by the value of
+        the "alg" (algorithm) Header Parameter, which MUST be present.
+        See Section 10.6 for security considerations on algorithm
+        validation.  Record whether the validation succeeded or not.
+
+        TODO:
+        If the JWS JSON Serialization is being used, repeat this process
+        (steps 4-8) for each digital signature or MAC value contained in
+        the representation.
+|#
+         #t
+         ]
+        [(list h p s _ _)
+         ;; XXX This is a JWE (cf. Section 9 of
+         ;; https://tools.ietf.org/html/draft-ietf-jose-json-web-encryption-40
+         ;; ) and we don't support it.
+         (fail #f)]
+        [_ (fail #f)]))
+    #t))
+
+(module+ test
+  (require typed/rackunit typed/json)
+  (define missing-period "eyJhbGciOiJIUzI1NiIsImtpZCI6IjhlN2EwMGYxZGFmMWMyYjcwMTU0NTlkZDY4Njg1NmMyIn0")
+  (check-false (valid-jwt? missing-period))
+  ;; TODO: Add tests for other fail cases, and for a success case.
+  )
+
 (: decode-jwt (String -> (Option JWT)))
 (define (decode-jwt jwt)
   (let/ec fail : False
     (: decode/read (String -> (Option JSExpr)))
     (define (decode/read s)
-      (define maybe-decoded
-        (read-json
-         (open-input-bytes (base64-decode (string->bytes/utf-8 s)))))
+      (define maybe-decoded (try-decoding s))
       (if (eof-object? maybe-decoded)
           (fail #f)
           maybe-decoded))
@@ -34,9 +109,7 @@
     
     (and header claims secret (JWT header claims secret))))
 
-(module+ test
-  (require typed/rackunit typed/json)
-  
+(module+ test  
   (: jwt1 String)
   ;; A simple JWT like the default one produced by jwt.io:
   (define jwt1 "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjEyMzQ1Njc4OTAsIm5hbWUiOiJKb2huIERvZSIsImFkbWluIjp0cnVlfQ.eoaDVGTClRdfxUZXiPs3f8FmJDkDE_VCQFXqKxpLsts")
@@ -97,3 +170,7 @@
   (check-equal? (decode-jwt jwt2)
                 (JWT jwt2-header jwt2-claims jwt2-secret-enc))
   )
+
+(: try-decoding (String -> (U EOF JSExpr)))
+(define (try-decoding s)
+  (read-json (open-input-bytes (base64-decode (string->bytes/utf-8 s)))))
