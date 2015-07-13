@@ -47,10 +47,10 @@
                     [exn:fail:read? (lambda (e) (fail #f))])
       (match (string-split s ".")
         [(list h p s)
-         (define h/end (try-decoding h))
-         (when (eof-object? h/end) (fail #f))
-         (define p/end (try-decoding p))
-         (when (eof-object? p/end) (fail #f))
+         (define h/f (try-decoding h))
+         (unless (jsexpr? h/f) (fail #f))
+         (define p/f (try-decoding p))
+         (unless (jsexpr? p/f) (fail #f))
          ;; TODO:
          ;; - verify that we understand and can process all fields required
          ;;   by the JWS spec, the algorithm designated in the header, and
@@ -92,20 +92,13 @@
 (: decode-jwt (String -> (Option JWT)))
 (define (decode-jwt jwt)
   (let/ec fail : False
-    (: decode/read (String -> (Option JSExpr)))
-    (define (decode/read s)
-      (define maybe-decoded (try-decoding s))
-      (if (eof-object? maybe-decoded)
-          (fail #f)
-          maybe-decoded))
-    
     (define-values (header-string payload-string secret)
       (match (string-split jwt ".")
         [(list h p s) (values h p s)]
         [_ (fail #f)]))
     
-    (define header (decode/read header-string))
-    (define claims (decode/read payload-string))
+    (define header (try-decoding header-string))
+    (define claims (try-decoding payload-string))
     
     (and header claims secret (JWT header claims secret))))
 
@@ -171,6 +164,13 @@
                 (JWT jwt2-header jwt2-claims jwt2-secret-enc))
   )
 
-(: try-decoding (String -> (U EOF JSExpr)))
+(: try-decoding (String -> (Option JSExpr)))
+;; Attempts to interpret the given string as a Base64url encoding of
+;; UTF-8-encoded text representing a valid JSON object, and produces that JSON
+;; object if possible. Otherwise, produces #f.
 (define (try-decoding s)
-  (read-json (open-input-bytes (base64-decode (string->bytes/utf-8 s)))))
+  (with-handlers ([exn:fail:read? (lambda _ #f)])
+    (define obj/f
+      (read-json (open-input-bytes (base64-decode (string->bytes/utf-8 s)))))
+    (and (not (eof-object? obj/f))
+         obj/f)))
