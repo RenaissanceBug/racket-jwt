@@ -123,7 +123,7 @@ names specified in RFC 7519 @cite["RFC7519"].
   Decodes and verifies a JWS compact serialization. Checks the signature, and
   if @racket[audience] is not @racket[#f] and the JWT has an @tt{aud} field,
   checks that the given audience matches one of the JWT's audiences.
-  Produces #f if for any reason the JWT can't be validated.
+  Produces @racket[#f] if for any reason the JWT can't be validated.
 }
 
 @; ------------------------------------------------------------------------
