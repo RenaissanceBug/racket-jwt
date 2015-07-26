@@ -128,6 +128,8 @@ names specified in RFC 7519 @cite["RFC7519"].
 
 @; ------------------------------------------------------------------------
 
+@section[#:tag "jwt-algorithms"]{Algorithms: Signing and Verifying}
+
 @defmodule[net/jwt/algorithms]{
   Provides functions related to signing JWTs and verifying JWT signatures.
   Currently the only supported algorithm is HMAC-SHA256, via @racket[hs256].
