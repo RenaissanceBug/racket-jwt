@@ -3,40 +3,47 @@
 (require (only-in grommet/crypto/hmac hmac-sha256)
          "base64.rkt")
 
-(provide SigningFunction
+(provide (struct-out exn:fail:unsupported-algorithm)
+         SigningFunction
          ok-signature?
-         hs256
+         none hs256
          supported?
          signing-function)
 
 (define-type SigningFunction (String String -> Bytes))
 
+(struct exn:fail:unsupported-algorithm exn:fail [])
+
 (: ok-signature? (->* (String String String) (SigningFunction) Boolean))
 (define (ok-signature? sig secret message [sign hs256])
   (equal? (sign secret message) (base64-url-decode sig)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Signing functions.
+
+#| To implement another signing function:
+1. Add the definition here.
+2. Add its name to supported-algorithms, below.
+3. Add it to signing-functions, below
+|#
+
+(: none SigningFunction)
+(define (none secret message) #"")
+
 (: hs256 SigningFunction)
 (define (hs256 secret message) (hmac-sha256 secret message))
-
-(module+ test
-  (require typed/rackunit
-           "base64.rkt")
-  (check-true
-   (ok-signature? "TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeFONFh7HgQ"
-                  "secret"
-                  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9")))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Metadata for users
 
 (: supported-algorithms (Listof String))
-(define supported-algorithms '("HS256"))
+(define supported-algorithms '("none" "HS256"))
 
 (: supported? (String -> Boolean))
 (define (supported? alg-name) (and (member alg-name supported-algorithms) #t))
 
 (: signing-functions (Listof SigningFunction))
-(define signing-functions (list hs256))
+(define signing-functions (list none hs256))
 
 (: algorithm-table (HashTable String SigningFunction))
 (define algorithm-table

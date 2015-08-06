@@ -5,14 +5,18 @@
          net/jwt/structs
          )
 
-(provide JWT JWT?
+(provide JSXHash
+         JWT JWT?
          VerifiedJWT VerifiedJWT?
          header
          signature issuer subject audiences
          expiration-date not-before issued-at
          jwt-id
-         special-claims-ref
-         decode-jwt verify-jwt decode/verify)
+         claims-ref
+         decode-jwt verify-jwt decode/verify
+         encode-jwt encode/sign)
+
+(define-type JSXHash (HashTable Symbol JSExpr))
 
 (: JWT? (Any -> Boolean : JWT))
 (define JWT? decoded-jwt?)
@@ -47,8 +51,8 @@
 (: jwt-id (JWT -> (Option String)))
 (define jwt-id (compose JWTClaimsSet-jti decoded-jwt-claims))
 
-(: special-claims-ref (JWT Symbol -> (Option JSExpr)))
-(define (special-claims-ref jwt key)
+(: claims-ref (JWT Symbol -> (Option JSExpr)))
+(define (claims-ref jwt key)
   (hash-ref (JWTClaimsSet-other (decoded-jwt-claims jwt))
             key
             (lambda _ #f)))

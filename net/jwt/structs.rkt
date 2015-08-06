@@ -5,7 +5,8 @@
          JWTClaimsSet (struct-out JWTClaimsSet)
          jshash->claims
          claims->jshash
-         string64/utf-8->jsexpr)
+         string64/utf-8->jsexpr
+         jsexpr->string64/utf-8)
 
 (require typed/json "base64.rkt")
 (require/typed racket/date [date->seconds (-> date Integer)])
@@ -130,5 +131,5 @@
            (and (not (eof-object? obj/f))
                 obj/f)))))
 
-
-
+(: jsexpr->string64/utf-8 (JSExpr -> String))
+(define (jsexpr->string64/utf-8 jsx) (base64-url-encode (jsexpr->bytes jsx)))

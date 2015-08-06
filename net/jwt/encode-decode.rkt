@@ -3,6 +3,7 @@
 (require typed/json
          "structs.rkt"
          "algorithms.rkt"
+         (only-in "base64.rkt" base64-url-encode)
          )
 
 (require/typed racket/date [date->seconds (-> date Integer)])
@@ -10,6 +11,8 @@
 (provide decode-jwt
          verify-jwt
          decode/verify
+         encode/sign
+         encode-jwt
          )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -40,7 +43,8 @@ Decodes the given Compact JWS Serialization, producing an unverified JWT.
   (let/ec fail : False
     (define-values (header-string payload-string signature)
       (match (string-split jwt ".")
-        [(list h p s) (values h p s)]
+        [(list h p)   (values h p "")] ; XXX this is *slightly* too permissive;
+        [(list h p s) (values h p s)]  ; it would accept JWTs with only one "."
         [_ (fail #f)]))
     (fail-with define-or-fail (fail #f))
     
@@ -55,20 +59,29 @@ Decodes the given Compact JWS Serialization, producing an unverified JWT.
                       (jshash->claims claims) payload-string
                       signature))))
 
-(: verify-jwt (->* (JWT String) ([Option String])
+(: verify-jwt (->* (JWT String String)
+                   (#:aud (Option String)
+                    #:iss (Option String)
+                    #:clock-skew Exact-Nonnegative-Integer)
                    (Option VerifiedJWT)))
 #|
 Checks a decoded JWT to verify that the signature can be verified using
 the given secret and is intended for the given audience.
 |#
-(define (verify-jwt jwt secret [audience #f])
+(define (verify-jwt jwt algorithm secret
+                    #:aud [audience #f]
+                    #:iss [expected-issuer #f]
+                    #:clock-skew [skew 30])
   (let/ec fail : False
-    (match-define (decoded-jwt header rh claims rc sig) jwt)
+    (match-define (decoded-jwt header rh claims payload sig) jwt)
     (fail-with define-or-fail (fail #f))
     
-    (define-or-fail algorithm
-      (hash-ref header 'alg (lambda _ ""))
-      (and (string? algorithm) (supported? algorithm)))
+    ;; Check that the JWT's "alg" field matches the expected algorithm.
+    (unless (and (supported? algorithm)
+                 (not (string=? algorithm "none"))
+                 (equal? algorithm (hash-ref header 'alg (lambda _ ""))))
+      (fail #f))
+    
     (: sign SigningFunction)
     (define-or-fail sign (signing-function algorithm) sign)
 
@@ -80,25 +93,28 @@ the given secret and is intended for the given audience.
     ;; canonical order in the RFC; it's not easily possible to reconstruct the
     ;; original compact JWS string because of that.
 
-    ;; TODO also check the audience
-    (define rch (string64/utf-8->jsexpr rc))
+    (define rch (string64/utf-8->jsexpr payload))
     (and (equal? (string64/utf-8->jsexpr rh) header)
          (hash? rch)
          (equal? (jshash->claims rch) claims)
-         (ok-signature? sig secret (string-append rh "." rc) sign)
-         (verified-jwt header rh claims rc sig))))
+         (or (not audience) (audience-ok? audience claims))
+         (or (not expected-issuer) (issuer-ok? expected-issuer claims))
+         (date-ok? claims skew)
+         (ok-signature? sig secret (string-append rh "." payload) sign)
+         (verified-jwt header rh claims payload sig))))
 
-(: decode/verify (->* (String String) ((Option String)) (Option VerifiedJWT)))
-#|
-Decodes and verifies a JWS compact serialization. Checks the signature, and
-if @racket[audience] is not @racket[#f] and the JWT has an "aud" field, checks
-that the given audience matches one of the JWT's audiences.
-Produces #f if for any reason the JWT can't be validated.
-|#
-(define (decode/verify s secret [audience #f])
+(: decode/verify (->* (String String String)
+                      (#:aud (Option String)
+                       #:iss (Option String)
+                       #:clock-skew Exact-Nonnegative-Integer)
+                      (Option VerifiedJWT)))
+(define (decode/verify s algorithm secret
+                       #:aud [audience #f]
+                       #:iss [expected-issuer #f]
+                       #:clock-skew [skew 30])
   (let/ec fail : False
-    (when (regexp-match #px"\\s" s)
-      (fail #f))
+    (when (regexp-match #px"\\s" s)   (fail #f))
+    (when (string=? algorithm "none") (fail #f))
     
     (fail-with define-or-fail (fail #f))
     
@@ -125,10 +141,12 @@ Produces #f if for any reason the JWT can't be validated.
       ;; As it stands, if a header contains the same name twice, the
       ;; read-json function keeps the last value for that name, and silently
       ;; discards the other values.
-      (define-or-fail algorithm (hash-ref JOSE-header 'alg (lambda _ ""))
-        (and (string? algorithm) (supported? algorithm)))
 
-      ;; TODO also check the audience
+      ;; Check that the JWT's "alg" field matches our algorithm.
+      (unless (and (supported? algorithm)
+                   (equal? algorithm (hash-ref JOSE-header 'alg (lambda _ ""))))
+        (fail #f))
+
       (: sign SigningFunction)
       (define-or-fail sign
         (signing-function algorithm)
@@ -145,6 +163,7 @@ Produces #f if for any reason the JWT can't be validated.
       (define-or-fail payload (string64/utf-8->jsexpr JWS-payload)
         (and (jsexpr? payload)
              (hash? payload)))
+      (define claims (jshash->claims payload))
 
       ;; 7-8 decode the sig (done by ok-signature?, not here), and check the
       ;; header and payload against it
@@ -155,22 +174,137 @@ Produces #f if for any reason the JWT can't be validated.
         (fail #f))
       ;; TODO If the JOSE Header contains "cty" value of "JWT", then the Message
       ;; is a JWT; process the Message recursively.
-      (verified-jwt JOSE-header JWS-protected-header
-                    (jshash->claims payload) JWS-payload
+
+      (when audience
+        (unless (audience-ok? audience claims) (fail #f)))
+      (when expected-issuer
+        (unless (issuer-ok? expected-issuer claims) (fail #f)))
+      (unless (date-ok? claims skew)
+        (fail #f))
+
+      (verified-jwt JOSE-header JWS-protected-header claims JWS-payload
                     signature))))
+
+(: audience-ok? (String JWTClaimsSet -> Boolean))
+;; aud check
+(define (audience-ok? this-audience claims)
+  (define ok-audiences (JWTClaimsSet-aud claims))
+  (or (null? ok-audiences)
+      (and (member this-audience ok-audiences) #t)))
+
+(: issuer-ok? (String JWTClaimsSet -> Boolean))
+;; iss check
+(define (issuer-ok? expected-issuer claims)
+  (define JWT-issuer (JWTClaimsSet-iss claims))
+  (or (not JWT-issuer) (string=? expected-issuer JWT-issuer)))
+
+(: date-ok? (JWTClaimsSet Exact-Nonnegative-Integer -> Boolean))
+;; exp and nbf check
+(define (date-ok? claims skew)
+  (define expiration (JWTClaimsSet-exp claims))
+  (define nbf (JWTClaimsSet-nbf claims))
+  (and (or (not expiration)
+           (<= (- (current-seconds) skew) (date->seconds expiration)))
+       (or (not nbf)
+           (>= (+ (current-seconds) skew) (date->seconds nbf)))))
+
+;; TODO add a way to check why decoding/verifying fails.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Encoding
 
-;; TODO
-#;#;
-(: encode/sign (-> SigningFunction JWTClaimsSet String
+(: encode/sign (->* (String String)
+                    (#:extra-headers (HashTable Symbol JSExpr)
+                     #:iss (Option String)
+                     #:sub (Option String)
+                     #:aud (U String (Listof String))
+                     #:exp (Option (U date Integer))
+                     #:nbf (Option (U date Integer))
+                     #:iat (Option (U date Integer))
+                     #:jti (Option String)
+                     #:other (HashTable Symbol JSExpr))
                    String))
-(define (encode/sign sign claims secret)
-  "")
+;; See Section 5.1 of RFC7515, http://tools.ietf.org/html/rfc7515#section-5.1
+(define (encode/sign algorithm secret
+                     #:extra-headers [headers
+                                      #{#hasheq() :: (HashTable Symbol JSExpr)}]
+                     #:iss [iss #f]
+                     #:sub [sub #f]
+                     #:aud [aud '()]
+                     #:exp [exp #f]
+                     #:nbf [nbf #f]
+                     #:iat [iat (current-seconds)]
+                     #:jti [jti #f]
+                     #:other [claims #{#hasheq() :: (HashTable Symbol JSExpr)}])
+  (define sign : SigningFunction
+    (or (signing-function algorithm)
+        (raise (exn:fail:unsupported-algorithm
+                (format "Unsupported signing algorithm ~a" algorithm)
+                (current-continuation-marks)))))
+  (define-syntax extend-hash (syntax-rules ()
+                               [(_ ht name) (?hash-set ht 'name name)]
+                               [(_ ht name name2 ...)
+                                (extend-hash (?hash-set ht 'name name)
+                                             name2 ...)]))
+  
+  (define all-claims : (HashTable Symbol JSExpr) ;; JWS Payload content
+    (let ([exp (to-seconds exp)]
+          [nbf (to-seconds nbf)]
+          [iat (if (date? iat) (date->seconds iat) iat)])
+      (extend-hash claims iss sub aud exp nbf iat jti)))
+  (define all-headers : (HashTable Symbol JSExpr) ;; JOSE Header content
+    (hash-set headers 'alg algorithm))
+  (define header/payload
+    (string-append (jsexpr->string64/utf-8 all-headers) ; BASE64URL(Payload)
+                   "."
+                   (jsexpr->string64/utf-8 all-claims))); BASE64URL(UTF8(Header))
 
-;; TODO
-#;#;
-(: encode-unsigned (-> JWTClaimsSet String))
-(define (encode-unsigned claims)
-  "")
+  (string-append header/payload
+                 "."
+                 (base64-url-encode (sign secret header/payload)))) ; Signature
+
+(: to-seconds (-> (Option (U date Integer))
+                  (Option Integer)))
+;; Coerces dates to NumericDate format (aka seconds since the epoch). Used
+;; by encode/sign.
+(define (to-seconds d/s)
+  (and d/s
+       (let ([s (if (date? d/s) (date->seconds d/s) d/s)])
+         (and (not (negative? s)) s))))
+
+(: ?hash-set (-> (HashTable Symbol JSExpr) Symbol (Option JSExpr)
+                 (HashTable Symbol JSExpr)))
+;; Adds {key,val} to ht if val is not #f or '().
+(define (?hash-set ht key val)
+  (if (and val (not (null? val)))
+      (hash-set ht key val)
+      ht))
+
+(: encode-jwt (->* ()
+                   (#:headers (HashTable Symbol JSExpr)
+                    #:iss (Option String)
+                    #:sub (Option String)
+                    #:aud (U String (Listof String))
+                    #:exp (Option (U date Integer))
+                    #:nbf (Option (U date Integer))
+                    #:iat (Option (U date Integer))
+                    #:jti (Option String)
+                    #:other (HashTable Symbol JSExpr))
+                   String))
+(define (encode-jwt
+         #:headers [headers #{#hasheq() :: (HashTable Symbol JSExpr)}]
+         #:iss [iss #f]
+         #:sub [sub #f]
+         #:aud [aud '()]
+         #:exp [exp #f]
+         #:nbf [nbf #f]
+         #:iat [iat #f]
+         #:jti [jti #f]
+         #:other [claims
+                  #{#hasheq() :: (HashTable Symbol JSExpr)}])
+  (encode/sign "none" ""
+               #:extra-headers headers
+               #:iss iss #:sub sub #:aud aud
+               #:exp exp #:nbf nbf #:iat iat
+               #:jti jti
+               #:other claims))

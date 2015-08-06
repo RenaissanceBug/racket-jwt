@@ -1,5 +1,11 @@
 #lang typed/racket
 
+;; Base64 encoding with URL and filename-safe alphabet, as described
+;; in RFC4648: http://tools.ietf.org/html/rfc4648#section-5
+
+;; TODO make this a separate package, or submit as a patch
+;; to net/base64?
+
 (require typed/net/base64)
 (provide base64-url-encode
          base64-url-decode)
@@ -10,8 +16,10 @@
     (string-split (bytes->string/utf-8 (base64-encode bs))
                                       "="))
   (if (pair? encoded)
-      (string-replace (string-replace (car encoded) "+" "-")
-                      "/" "_")
+      (regexp-replace* #px"\\s+"
+                       (string-replace (string-replace (car encoded) "+" "-")
+                                       "/" "_")
+                       "")
       ""))
 
 (: base64-url-decode (String -> (Option Bytes)))
@@ -32,11 +40,3 @@
                        [(2) "=="]
                        [(3) "="]
                        [else (error 'pad "can't happen")]))))
-
-(module+ test
-  (require typed/rackunit)
-  (check-equal? (base64-url-encode (list->bytes (list 3 236 255 224 193)))
-                "A-z_4ME") ;; From Appendix C of RFC7515
-  (check-equal? (base64-url-encode #"") "")
-  (check-equal? (base64-url-decode "") #"")
-  )
