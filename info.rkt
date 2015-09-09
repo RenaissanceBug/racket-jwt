@@ -6,7 +6,6 @@
                "base"
                "typed-racket-lib"
                "typed-racket-more"
-               "unstable-contract-lib"
                "grommet"))
 
 (define build-deps
