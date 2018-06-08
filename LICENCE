@@ -1,5 +1,6 @@
-This code is available according to same terms as Racket:
+This code is available under the GNU Lesser General Public License (which,
+as of 2018, is the same as Racket):
 
-http://download.racket-lang.org/license.html
+http://www.gnu.org/licenses/lgpl-3.0.html
 
-Copyright ©  <authorname>
+© 2015–2018, Jordan Johnson
