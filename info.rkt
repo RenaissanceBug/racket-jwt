@@ -6,7 +6,7 @@
                "base"
                "typed-racket-lib"
                "typed-racket-more"
-               "grommet"))
+               "sha"))
 
 (define build-deps
   '("rackunit-lib" "web-server-lib" "racket-doc" "scribble-lib"
