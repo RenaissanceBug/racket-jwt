@@ -319,7 +319,7 @@ names specified in RFC 7519 @cite["RFC7519"].
 
 @defproc[(none [secret (U String Bytes)] [message (U String Bytes)])
          Bytes]{
-  A no-op @racket[SigningFunction] that always produces @racket['()].
+  A no-op @racket[SigningFunction] that always produces @racket[#""].
 }
 
 @defproc[(hs256 [secret (U String Bytes)] [message (U String Bytes)])
