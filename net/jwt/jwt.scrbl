@@ -289,10 +289,11 @@ names specified in RFC 7519 @cite["RFC7519"].
 
 @defmodule[net/jwt/algorithms]{
   Provides functions related to signing JWTs and verifying JWT signatures.
-  Currently the only supported algorithms are HMAC-SHA256, via @racket[hs256],
-  and the no-op algorithm @racket[none] (see RFC7515 Appendix A.5
-  @cite["RFC7515"]). Any additional algorithms that may be implemented in future
-  will be accessible via a @racket[SigningFunction] defined in this module.
+  Currently the only supported algorithms are HMAC-SHA256, via @racket[hs256]
+  from the @racket[sha] package, and the no-op algorithm @racket[none] (see
+  RFC7515 Appendix A.5 @cite["RFC7515"]). Any additional algorithms that may
+  be implemented in future will be accessible via a @racket[SigningFunction]
+  defined in this module.
 
   All of the names listed for this module are also exported by
   @racket[net/jwt].
@@ -304,36 +305,44 @@ names specified in RFC 7519 @cite["RFC7519"].
 }
 
 @deftype[SigningFunction]{
-  Represents a signing function, which takes two strings (a secret and a
-  message) and produces a byte string representing a message signature.
+  Represents a signing function, which takes two inputs (a secret and a
+  message) that are strings or byte strings, and produces a byte string
+  representing a message signature. Any strings provided as input will be
+  converted to byte strings using @racket[current-string-converter].
 }
 
-@defproc[(none [secret String] [message String])
+@defparam[current-string-converter convert-to-bytes (String -> Bytes)
+                                   #:value string->bytes/utf-8]{
+  The function used for converting strings to byte strings before
+  applying a @racket[SigningFunction] to them.
+}
+
+@defproc[(none [secret (U String Bytes)] [message (U String Bytes)])
          Bytes]{
-  A no-op @racket[SigningFunction].
+  A no-op @racket[SigningFunction] that always produces @racket['()].
 }
 
-@defproc[(hs256 [secret String] [message String])
+@defproc[(hs256 [secret (U String Bytes)] [message (U String Bytes)])
          Bytes]{
   A @racket[SigningFunction] for the HMAC-SHA256 algorithm.
 }
 
 @defproc[(ok-signature? [sig String]
-                        [secret String]
-                        [message String]
+                        [secret (U String Bytes)]
+                        [message (U String Bytes)]
                         [sign SigningFunction hs256])
          Boolean]{
-  Produces true iff the given @racket[message] produces the given signature
-  @racket[sig] when signed with @racket[sign] using the given @racket[secret].
+  Produces true iff the given @racket[message] produces @racket[sig]
+  when signed with @racket[sign] using the given @racket[secret].
 }
 
-@defproc[(supported? [algorithm-name String]) Boolean]{
+@defproc[(supported? [algorithm-name (U Symbol String)]) Boolean]{
   Produces true iff the algorithm with the given @tt{alg} Header Parameter name,
   defined in RFC 7518 @cite["RFC7518"], is supported. Currently only
-  @racket["HS256"] is supported.
+  HS256 (named @racket['HS256] or @racket["HS256"]) is supported.
 }
 
-@defproc[(signing-function [algorithm-name String]) (Option SigningFunction)]{
+@defproc[(signing-function [algorithm-name (U Symbol String)]) (Option SigningFunction)]{
   Produces a @racket[SigningFunction] if @racket[algorithm-name] (again, an
   RFC 7518 @cite["RFC7518"] Header Parameter name) is supported, @racket[#f]
   otherwise.
