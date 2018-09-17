@@ -5,6 +5,8 @@
 (require/typed sha
                [#:opaque Lib-SHA256 sha256?])
 
+;; XXX is there a better way to obtain a type based on sha256? that
+;; documents that if (sha256? x) then (bytes? x) as well?
 (define-type SHA256 (Intersection Lib-SHA256 Bytes))
 
 (require/typed sha
