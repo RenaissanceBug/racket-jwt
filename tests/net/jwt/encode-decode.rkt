@@ -242,95 +242,107 @@
               "Unsecured: encode-jwt with algorithm none")
 
 ;; Example unsecured JWS from Appendix A.5 of RFC7515:
+(define A.5-claims
+  #{#hasheq((http://example.com/is_root . #t)) :: JWTHeader})
+(define A.5-headers #{#hasheq((alg . "none")) :: JWTHeader})
+(define A.5-headers-string (jsexpr->string64/utf-8 A.5-headers))
+(define A.5-issuer "joe")
+(define A.5-exptime 1300819380)
+(define A.5-claims-payload
+  (jsexpr->string64/utf-8 (hash-set (hash-set A.5-claims 'exp A.5-exptime)
+                                    'iss A.5-issuer)))
+
 (check-equal? (encode/sign "none" ""
-                           #:iss "joe"
+                           #:iss A.5-issuer
                            #:iat #f
-                           #:exp 1300819380
-                           #:other
-                           #{#hasheq((http://example.com/is_root . #t))
-                             :: JWTHeader})
-              (string-append
-               "eyJhbGciOiJub25lIn0"
-               "."
-               ; XXX again, brittle. The following encoding doesn't match the
-               ; RFC's because our json library places the "exp" pair before
-               ; the "iss" pair; if the json library changes its output ordering,
-               ; so could the output of jsexpr->string64/utf-8 (which generates
-               ; the following two lines).
-               "eyJleHAiOjEzMDA4MTkzODAsImlzcyI6ImpvZSIsImh0dHA6Ly9leGFtcGxlLmNv"
-               "bS9pc19yb290Ijp0cnVlfQ"
-               ".")
+                           #:exp A.5-exptime
+                           #:other A.5-claims)
+              (string-append A.5-headers-string "." A.5-claims-payload ".")
               "Unsecured: RFC7515 appx A.5 example")
 ;; Again, same example but using encode-jwt:
 (check-equal? (encode-jwt #:iss "joe"
                           #:iat #f
                           #:exp 1300819380
-                          #:other #{#hasheq((http://example.com/is_root . #t))
-                                    :: JWTHeader})
-              (string-append
-               "eyJhbGciOiJub25lIn0"
-               "."
-               "eyJleHAiOjEzMDA4MTkzODAsImlzcyI6ImpvZSIsImh0dHA6Ly9leGFtcGxlLmNv"
-               "bS9pc19yb290Ijp0cnVlfQ"
-               ".")
+                          #:other A.5-claims)
+              (string-append A.5-headers-string "." A.5-claims-payload ".")
               "Unsecured: RFC7515 appx A.5 example with encode-jwt")
 
 ;; Encode then decode
 (check-equal? (decode-jwt (encode/sign "none" ""
-                                       #:extra-headers
-                                       #{#hasheq((test . "foo"))
-                                         :: JWTHeader}
+                                       #:extra-headers A.5-headers
                                        #:iss "http://www.example.com"
                                        #:iat issue-date))
-              (let ([hdr : JWTHeader
-                         #hasheq((test . "foo") (alg . "none"))] ;; XXX order
-                    [claims (JWTClaimsSet "http://www.example.com"
+              (let ([claims (JWTClaimsSet "http://www.example.com"
                                           #f '() #f #f
                                           (seconds->date issue-date)
                                           #f
                                           #hasheq())])
-                (decoded-jwt hdr 
-                             (jsexpr->string64/utf-8 hdr)
+                (decoded-jwt A.5-headers
+                             A.5-headers-string
                              claims
                              (jsexpr->string64/utf-8 (claims->jshash claims))
                              ""))
               "Unsecured: encode/sign then decode-jwt")
-(check-false (decode/verify (encode/sign "none" ""
-                                         #:extra-headers
-                                         #{#hasheq((test . "foo"))
-                                           :: JWTHeader}
-                                         #:iss "http://www.example.com"
-                                         #:iat issue-date)
+(check-false (decode/verify
+              (encode/sign "none" ""
+                           #:extra-headers #hasheq((test . "foo"))
+                           #:iss "http://www.example.com"
+                           #:iat issue-date)
                             "none"
                             "")
              "Unsecured: fail to decode/verify a JWT from encode/sign with alg \"none\"")
 
 ;;;;; Secured JWTs ;;;;;
 
+#| Example JSON submitted at https://jwt.io :
+{
+  "alg": "HS256",
+  "test": "foo"
+}
+{
+  "iat": 1000000000,
+  "iss": "http://www.example.com"
+}
+The constant defs below are our representation of the above JSON.
+|#
 (define hs256-header : JWTHeader
   #{#hasheq((alg . "HS256")) : JWTHeader})
 (define hs256-header-str (jsexpr->string64/utf-8 hs256-header))
 
+(define hs256-ext-header : JWTHeader (hash-set hs256-header 'test "foo"))
+(define hs256-ext-header-str (jsexpr->string64/utf-8 hs256-ext-header))
+
+(define hs256-claims
+  (JWTClaimsSet "http://www.example.com" #f '() #f #f (seconds->date issue-date)
+                #f #hasheq()))
+(define hs256-claims-str (jsexpr->string64/utf-8 (claims->jshash hs256-claims)))
+
+;; The JWT produced by https://jwt.io has the following parts:
+(define hs256-jwtio-header "eyJhbGciOiJIUzI1NiIsInRlc3QiOiJmb28ifQ")
+(define hs256-jwtio-claims "eyJpYXQiOjEwMDAwMDAwMDAsImlzcyI6Imh0dHA6Ly93d3cuZXhhbXBsZS5jb20ifQ")
+(define hs256-jwtio-signature "6kb6EjXACGvehEbQKHhcCAUKDVvBKJKdotTKSMTAYuo")
+
+;; Begin tests
+
+(check-equal? hs256-ext-header-str hs256-jwtio-header
+              "HS256 test: check that we're matching jwt.io's output")
+(check-equal? hs256-claims-str hs256-jwtio-claims
+              "HS256 test: check that we're matching jwt.io's output")
+(check-equal? (base64-url-encode
+               (hs256 "swordfish"
+                      (string-append hs256-ext-header-str "." hs256-claims-str)))
+              hs256-jwtio-signature
+              "HS256 test: check that our signature matches jwt.io's output")
+
 (check-equal? (decode/verify (encode/sign "HS256" "swordfish"
-                                          #:extra-headers
-                                          #{#hasheq((test . "foo"))
-                                            :: JWTHeader}
+                                          #:extra-headers #hasheq((test . "foo"))
                                           #:iss "http://www.example.com"
                                           #:iat issue-date)
                              "HS256" "swordfish")
-              (let ([hdr : JWTHeader
-                         (hash-set hs256-header 'test "foo")]
-                    [claims (JWTClaimsSet "http://www.example.com"
-                                          #f '() #f #f
-                                          (seconds->date issue-date)
-                                          #f
-                                          #hasheq())])
-                (verified-jwt hdr 
-                              (jsexpr->string64/utf-8 hdr)
-                              claims
-                              (jsexpr->string64/utf-8 (claims->jshash claims))
-                              "cQmaVlmPs26ztbjWFrbLQVvwG1Gx4l40LC8psg5DNGY"))
-              "decode/verify secured JWT from encode/sign")
+              (verified-jwt hs256-ext-header hs256-ext-header-str
+                            hs256-claims hs256-claims-str
+                            hs256-jwtio-signature)
+              "HS256 test: decode/verify secured JWT from encode/sign")
 
 ;; exp check (border cases)
 (define now-100 : Integer (- (current-seconds) 100))
