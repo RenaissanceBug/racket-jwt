@@ -50,17 +50,23 @@
 (define (hs256 secret message)
   (hmac-sha256 (as-bytes secret) (as-bytes message)))
 
-(: as-bytes ((U String Bytes) -> Bytes))
+(: as-bytes (SorB -> Bytes))
 (define (as-bytes s/b) (if (bytes? s/b) s/b ((current-string-converter) s/b)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Metadata for users
 
-(: supported-algorithms (Listof (U Symbol String)))
-(define supported-algorithms '("none" none "HS256" HS256))
+;; All algorithm names listed below should be strings trimmed of whitespace
+;; containing only the name of one of the "alg" header parameter values from
+;; the JWA RFC Section 3.1.
+(: supported-algorithms (Listof String))
+(define supported-algorithms '("none" "HS256"))
 
-(: supported? (String -> Boolean))
-(define (supported? alg-name) (and (member alg-name supported-algorithms) #t))
+(: supported? ((U Symbol String) -> Boolean))
+(define (supported? alg-name)
+  (define alg-name/s (alg-as-string alg-name))
+  (for/or ([alg (in-list supported-algorithms)])
+    (string-ci=? alg alg-name/s)))
 
 (: signing-functions (Listof SigningFunction))
 (define signing-functions (list none hs256))
@@ -74,5 +80,8 @@
 
 (: signing-function ((U Symbol String) -> (Option SigningFunction)))
 (define (signing-function algorithm-name)
-  (hash-ref algorithm-table algorithm-name (lambda () #f)))
+  (hash-ref algorithm-table (alg-as-string algorithm-name) (λ () #f)))
 
+(: alg-as-string ((U Symbol String) -> String))
+(define (alg-as-string alg)
+  (if (symbol? alg) (symbol->string alg) alg))

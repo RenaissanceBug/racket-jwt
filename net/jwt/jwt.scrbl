@@ -340,6 +340,9 @@ names specified in RFC 7519 @cite["RFC7519"].
   Produces true iff the algorithm with the given @tt{alg} Header Parameter name,
   defined in RFC 7518 @cite["RFC7518"], is supported. Currently only
   HS256 (named @racket['HS256] or @racket["HS256"]) is supported.
+
+  Algorithms may be named via symbols or strings, but are compared
+  case-sensitively to the RFC 7518 names.
 }
 
 @defproc[(signing-function [algorithm-name (U Symbol String)]) (Option SigningFunction)]{
