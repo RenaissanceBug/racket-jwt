@@ -1,6 +1,7 @@
 #lang typed/racket
 
-(provide JWT (struct-out decoded-jwt)
+(provide JSXHash
+         JWT (struct-out decoded-jwt)
          VerifiedJWT (struct-out verified-jwt)
          JWTClaimsSet (struct-out JWTClaimsSet)
          jshash->claims
@@ -32,6 +33,8 @@
            ; that MUST be understood by our impl; if not, the JWS is invalid.
      JWTClaimName
      ))
+
+(define-type JSXHash (HashTable Symbol JSExpr))
 
 ;(define-type JWTClaimName (U 'iss 'sub 'aud 'exp 'nbf 'iat 'jti))
 
