@@ -1,7 +1,6 @@
 #lang typed/racket/base
 
-(require (only-in sha hmac-sha256)
-         "base64.rkt")
+(require "base64.rkt")
 
 (require/typed sha
                [#:opaque Lib-SHA256 sha256?])
