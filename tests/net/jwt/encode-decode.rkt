@@ -324,6 +324,7 @@ The constant defs below are our representation of the above JSON.
 
 ;; Begin tests
 
+;; HS256
 (check-equal? hs256-ext-header-str hs256-jwtio-header
               "HS256 test: check that we're matching jwt.io's output")
 (check-equal? hs256-claims-str hs256-jwtio-claims
@@ -343,6 +344,61 @@ The constant defs below are our representation of the above JSON.
                             hs256-claims hs256-claims-str
                             hs256-jwtio-signature)
               "HS256 test: decode/verify secured JWT from encode/sign")
+
+;; HS384
+(define hs384-header : JWTHeader
+  #{#hasheq((alg . "HS384")) : JWTHeader})
+(define hs384-header-str (jsexpr->string64/utf-8 hs384-header))
+
+(define hs384-ext-header : JWTHeader (hash-set hs384-header 'test "foo"))
+(define hs384-ext-header-str (jsexpr->string64/utf-8 hs384-ext-header))
+
+(define hs384-claims-str hs256-claims-str)
+
+(define hs384-jwtio-signature
+  "nDBGvSj7VyvhkVSrwQ1bqtrIACh9067phxS3OOUP08lT7_bj0QnFjKNBOKlpJ-BV")
+(check-equal? (base64-url-encode
+               (hs384 "swordfish"
+                      (string-append hs384-ext-header-str "." hs384-claims-str)))
+              hs384-jwtio-signature
+              "HS384 test: check that our signature matches jwt.io's output")
+(check-equal? (decode/verify (encode/sign "HS384" "swordfish"
+                                          #:extra-headers #hasheq((test . "foo"))
+                                          #:iss "http://www.example.com"
+                                          #:iat issue-date)
+                             "HS384" "swordfish")
+              (verified-jwt hs384-ext-header hs384-ext-header-str
+                            hs256-claims hs384-claims-str ; sic
+                            hs384-jwtio-signature)
+              "HS384 test: decode/verify secured JWT from encode/sign")
+
+;; HS512
+(define hs512-header : JWTHeader
+  #{#hasheq((alg . "HS512")) : JWTHeader})
+(define hs512-header-str (jsexpr->string64/utf-8 hs512-header))
+
+(define hs512-ext-header : JWTHeader (hash-set hs512-header 'test "foo"))
+(define hs512-ext-header-str (jsexpr->string64/utf-8 hs512-ext-header))
+
+(define hs512-claims-str hs256-claims-str)
+
+(define hs512-jwtio-signature
+  "HkxGdAF2K8ADRgm1WUdFWKmZLm1EKzXKhcJ5FnD2YHFdILTZ4c1BDm7Kk-xMbXJfl0xuCHulATGzjo8YdlRTUA")
+
+(check-equal? (base64-url-encode
+               (hs512 "swordfish"
+                      (string-append hs512-ext-header-str "." hs512-claims-str)))
+              hs512-jwtio-signature
+              "HS512 test: check that our signature matches jwt.io's output")
+(check-equal? (decode/verify (encode/sign "HS512" "swordfish"
+                                          #:extra-headers #hasheq((test . "foo"))
+                                          #:iss "http://www.example.com"
+                                          #:iat issue-date)
+                             "HS512" "swordfish")
+              (verified-jwt hs512-ext-header hs512-ext-header-str
+                            hs256-claims hs512-claims-str ; sic
+                            hs512-jwtio-signature)
+              "HS512 test: decode/verify secured JWT from encode/sign")
 
 ;; exp check (border cases)
 (define now-100 : Integer (- (current-seconds) 100))

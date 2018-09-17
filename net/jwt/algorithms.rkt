@@ -3,24 +3,29 @@
 (require "base64.rkt")
 
 (require/typed sha
-               [#:opaque Lib-SHA256 sha256?])
+               [#:opaque Lib-SHA256 sha256?]
+               [#:opaque Lib-SHA384 sha384?]
+               [#:opaque Lib-SHA512 sha512?])
 
 ;; XXX is there a better way to obtain a type based on sha256? that
 ;; documents that if (sha256? x) then (bytes? x) as well?
 (define-type SHA256 (Intersection Lib-SHA256 Bytes))
+(define-type SHA384 (Intersection Lib-SHA384 Bytes))
+(define-type SHA512 (Intersection Lib-SHA512 Bytes))
 
 (require/typed sha
-               [hmac-sha256
-                (-> Bytes Bytes SHA256)])
+               [hmac-sha256 (-> Bytes Bytes SHA256)]
+               [hmac-sha384 (-> Bytes Bytes SHA384)]
+               [hmac-sha512 (-> Bytes Bytes SHA512)])
 
 (provide (struct-out exn:fail:unsupported-algorithm)
          current-string-converter
          SigningFunction
          ok-signature?
-         none hs256
+         none hs256 hs384 hs512
          supported?
          signing-function
-         SHA256)
+         SHA256 SHA384 SHA512)
 
 (: current-string-converter (Parameterof (-> String Bytes)))
 (define current-string-converter (make-parameter string->bytes/utf-8))
@@ -39,7 +44,7 @@
 ;; Signing functions.
 
 #| To implement another signing function:
-1. Add the definition here.
+1. Add the definition here, specified as type SigningFunction.
 2. Add its name to supported-algorithms, below.
 3. Add it to signing-functions, below
 |#
@@ -48,8 +53,13 @@
 (define (none secret message) #"")
 
 (: hs256 SigningFunction)
-(define (hs256 secret message)
-  (hmac-sha256 (as-bytes secret) (as-bytes message)))
+(define (hs256 secret message) (hmac-sha256 (as-bytes secret) (as-bytes message)))
+
+(: hs384 SigningFunction)
+(define (hs384 secret message) (hmac-sha384 (as-bytes secret) (as-bytes message)))
+
+(: hs512 SigningFunction)
+(define (hs512 secret message) (hmac-sha512 (as-bytes secret) (as-bytes message)))
 
 (: as-bytes (SorB -> Bytes))
 (define (as-bytes s/b) (if (bytes? s/b) s/b ((current-string-converter) s/b)))
@@ -61,7 +71,7 @@
 ;; containing only the name of one of the "alg" header parameter values from
 ;; the JWA RFC Section 3.1.
 (: supported-algorithms (Listof String))
-(define supported-algorithms '("none" "HS256"))
+(define supported-algorithms '("none" "HS256" "HS384" "HS512"))
 
 (: supported? ((U Symbol String) -> Boolean))
 (define (supported? alg-name)
@@ -70,7 +80,7 @@
     (string-ci=? alg alg-name/s)))
 
 (: signing-functions (Listof SigningFunction))
-(define signing-functions (list none hs256))
+(define signing-functions (list none hs256 hs384 hs512))
 
 (: algorithm-table (HashTable (U Symbol String) SigningFunction))
 (define algorithm-table
