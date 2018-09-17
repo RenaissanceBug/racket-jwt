@@ -12,7 +12,8 @@
 
 (check-false
  (decode-jwt
-  "eyJhbGciOiJIUzI1NiIsImtpZCI6IjhlN2EwMGYxZGFmMWMyYjcwMTU0NTlkZDY4Njg1NmMyIn0"))
+  "eyJhbGciOiJIUzI1NiIsImtpZCI6IjhlN2EwMGYxZGFmMWMyYjcwMTU0NTlkZDY4Njg1NmMyIn0")
+ "simple decode failure check")
 
 ;;;;; A simple JWT like the default one produced by jwt.io:
 ; Header
@@ -96,39 +97,50 @@
 ;; Decoding
 (check-equal? (decode-jwt jwt1)
               (decoded-jwt jwt1-header jwt1-raw-header jwt1-claims
-                           jwt1-raw-payload jwt1-signature))
+                           jwt1-raw-payload jwt1-signature)
+              "decoding #1")
 (check-equal? (decode-jwt jwt2)
               (decoded-jwt jwt2-header jwt2-raw-header jwt2-claims
-                           jwt2-raw-payload jwt2-signature))
+                           jwt2-raw-payload jwt2-signature)
+              "decoding #2")
 ;; Decoding then verifying
 (check-equal? (?<- (lambda ([x : JWT]) (verify-jwt x "HS256" "secret"))
                    (decode-jwt jwt1))
               (verified-jwt jwt1-header jwt1-raw-header
                             jwt1-claims jwt1-raw-payload
-                            jwt1-signature))
+                            jwt1-signature)
+              "decode & verify #1")
 (check-equal? (?<- (lambda ([x : JWT]) (verify-jwt x "HS256" "secret"))
                    (decode-jwt jwt2))
-              verified-jwt2)
+              verified-jwt2
+              "decode & verify #2")
 (check-false (?<- (lambda ([x : JWT]) (verify-jwt x "HS256" "not the secret"))
-                  (decode-jwt jwt2)))
+                  (decode-jwt jwt2))
+             "decode & fail verification (wrong secret)")
 
 ;; decode/verify, no claim checks
 (check-equal? (decode/verify jwt1 "HS256" "secret")
               (verified-jwt jwt1-header jwt1-raw-header
                             jwt1-claims jwt1-raw-payload
-                            jwt1-signature))
+                            jwt1-signature)
+              "decode/verify w/o claim checks #1")
 (check-equal? (decode/verify jwt2 "HS256" "secret")
-              verified-jwt2)
+              verified-jwt2
+              "decode/verify w/o claim checks #2")
 
 ;; iss claim check
-(check-false (decode/verify jwt2 "HS256" "secret" #:iss "wrong.example.com"))
+(check-false (decode/verify jwt2 "HS256" "secret" #:iss "wrong.example.com")
+             "decode/verify with wrong iss")
 (check-equal? (decode/verify jwt2 "HS256" "secret" #:iss "accounts.google.com")
-              verified-jwt2)
+              verified-jwt2
+              "decode/verify with iss")
 ;; aud claim check
-(check-false (decode/verify jwt2 "HS256" "secret" #:aud "nobody.example.com"))
+(check-false (decode/verify jwt2 "HS256" "secret" #:aud "nobody.example.com")
+             "decode/verify with wrong aud")
 (check-equal? (decode/verify jwt2 "HS256" "secret"
                              #:aud "123456789.apps.googleusercontent.com")
-              verified-jwt2)
+              verified-jwt2
+              "decode/verify with aud")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Sample JWT with iss and aud claims
@@ -157,38 +169,48 @@
 (define jwt3 (decode-jwt jwt3-raw))
 (check-equal? jwt3
               (decoded-jwt jwt3-header jwt3-raw-header
-                           jwt3-claims jwt3-payload jwt3-signature))
+                           jwt3-claims jwt3-payload jwt3-signature)
+              "decoding #3")
 
 
 ;; No aud/iss check
-(check-equal? (decode/verify jwt3-raw "HS256" "secret") jwt3-struct)
+(check-equal? (decode/verify jwt3-raw "HS256" "secret") jwt3-struct
+              "decode/verify #3")
 
 ;; aud/iss checks, separately and together
 (check-equal? (decode/verify jwt3-raw "HS256" "secret" #:aud jwt3-audience)
-              jwt3-struct)
+              jwt3-struct
+              "decode/verify #3 with aud")
 (check-equal? (decode/verify jwt3-raw "HS256" "secret" #:iss jwt3-issuer)
-              jwt3-struct)
+              jwt3-struct
+              "decode/verify #3 with iss")
 (check-equal? (decode/verify jwt3-raw "HS256" "secret"
                              #:aud jwt3-audience
                              #:iss jwt3-issuer)
-              jwt3-struct)
+              jwt3-struct
+              "decode/verify #3 with aud & iss")
 
 ;; fail aud/iss checks
 (check-false (decode/verify jwt3-raw "HS256" "secret"
-                            #:aud "http://www.evil.com/"))
+                            #:aud "http://www.evil.com/")
+             "d/v #3, wrong aud")
 (check-false (decode/verify jwt3-raw "HS256" "secret"
-                            #:iss "http://www.google.com/"))
+                            #:iss "http://www.google.com/")
+             "d/v #3, wrong iss")
 ; 1 of 2 wrong
 (check-false (decode/verify jwt3-raw "HS256" "secret"
                             #:aud "http://www.evil.com/"
-                            #:iss jwt3-issuer))
+                            #:iss jwt3-issuer)
+             "d/v #3, wrong aud / right iss")
 (check-false (decode/verify jwt3-raw "HS256" "secret"
                             #:aud jwt3-audience
-                            #:iss "http://foo.bar.baz/"))
+                            #:iss "http://foo.bar.baz/")
+             "d/v #3, right aud / wrong iss")
 ; both wrong
 (check-false (decode/verify jwt3-raw "HS256" "secret"
                             #:aud "http://www.evil.com/"
-                            #:iss "http://www.google.com/"))
+                            #:iss "http://www.google.com/")
+             "d/v #3, wrong aud & iss")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Encoding, signing
@@ -205,7 +227,8 @@
                               ;; XXX brittle: hash k/v order may break test
                               (hasheq 'iss "http://www.example.com/"
                                       'iat issue-date))
-                             "."))
+                             ".")
+              "Unsecured: encode/sign with algorithm none")
 ;; Same example, written using encode-jwt:
 (check-equal? (encode-jwt #:iss "http://www.example.com/"
                       #:iat issue-date)
@@ -215,7 +238,8 @@
                               ;; XXX brittle: hash k/v order may break test
                               (hasheq 'iss "http://www.example.com/"
                                       'iat issue-date))
-                             "."))
+                             ".")
+              "Unsecured: encode-jwt with algorithm none")
 
 ;; Example unsecured JWS from Appendix A.5 of RFC7515:
 (check-equal? (encode/sign "none" ""
@@ -235,7 +259,8 @@
                ; the following two lines).
                "eyJleHAiOjEzMDA4MTkzODAsImlzcyI6ImpvZSIsImh0dHA6Ly9leGFtcGxlLmNv"
                "bS9pc19yb290Ijp0cnVlfQ"
-               "."))
+               ".")
+              "Unsecured: RFC7515 appx A.5 example")
 ;; Again, same example but using encode-jwt:
 (check-equal? (encode-jwt #:iss "joe"
                           #:iat #f
@@ -247,7 +272,8 @@
                "."
                "eyJleHAiOjEzMDA4MTkzODAsImlzcyI6ImpvZSIsImh0dHA6Ly9leGFtcGxlLmNv"
                "bS9pc19yb290Ijp0cnVlfQ"
-               "."))
+               ".")
+              "Unsecured: RFC7515 appx A.5 example with encode-jwt")
 
 ;; Encode then decode
 (check-equal? (decode-jwt (encode/sign "none" ""
@@ -267,7 +293,8 @@
                              (jsexpr->string64/utf-8 hdr)
                              claims
                              (jsexpr->string64/utf-8 (claims->jshash claims))
-                             "")))
+                             ""))
+              "Unsecured: encode/sign then decode-jwt")
 (check-false (decode/verify (encode/sign "none" ""
                                          #:extra-headers
                                          #{#hasheq((test . "foo"))
@@ -275,7 +302,8 @@
                                          #:iss "http://www.example.com"
                                          #:iat issue-date)
                             "none"
-                            "")) ; Fail to verify if "none" is the algorithm
+                            "")
+             "Unsecured: fail to decode/verify a JWT from encode/sign with alg \"none\"")
 
 ;;;;; Secured JWTs ;;;;;
 
@@ -301,7 +329,8 @@
                               (jsexpr->string64/utf-8 hdr)
                               claims
                               (jsexpr->string64/utf-8 (claims->jshash claims))
-                              "cQmaVlmPs26ztbjWFrbLQVvwG1Gx4l40LC8psg5DNGY")))
+                              "cQmaVlmPs26ztbjWFrbLQVvwG1Gx4l40LC8psg5DNGY"))
+              "decode/verify secured JWT from encode/sign")
 
 ;; exp check (border cases)
 (define now-100 : Integer (- (current-seconds) 100))
@@ -309,7 +338,8 @@
                                           #:exp now-100
                                           #:iat #f)
                             "HS256" "xyzzy xyzzy"
-                            #:clock-skew 99))
+                            #:clock-skew 99)
+             "decode/verify exp failure edge case with #:clock-skew")
 (check-equal? (decode/verify (encode/sign "HS256" "xyzzy xyzzy"
                                           #:exp now-100
                                           #:iat #f)
@@ -326,7 +356,8 @@
                               (base64-url-encode
                                (hs256 "xyzzy xyzzy"
                                       (string-append hs256-header-str "."
-                                                     claims-str))))))
+                                                     claims-str)))))
+              "decode/verify exp success edge case with #:clock-skew")
 
 ;; nbf check (border cases)
 (define now+100 : Integer (+ (current-seconds) 100))
@@ -334,7 +365,8 @@
                                           #:nbf now+100
                                           #:iat #f)
                             "HS256" "xyzzy xyzzy"
-                            #:clock-skew 99))
+                            #:clock-skew 99)
+             "decode/verify nbf failure edge case with #:clock-skew")
 (check-equal? (decode/verify (encode/sign "HS256" "xyzzy xyzzy"
                                           #:nbf now+100
                                           #:iat #f)
@@ -349,4 +381,5 @@
                               (base64-url-encode
                                (hs256 "xyzzy xyzzy"
                                       (string-append hs256-header-str "."
-                                                     claims-str))))))
+                                                     claims-str)))))
+              "decode/verify nbf success edge case with #:clock-skew")
