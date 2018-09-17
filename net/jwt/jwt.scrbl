@@ -2,7 +2,6 @@
 
 @(require scribble/manual scribble/eval
           (for-label typed/racket/base
-                     typed/json
                      racket/date
                      net/jwt
                      net/jwt/algorithms
