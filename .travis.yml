@@ -1,0 +1,40 @@
+language: c
+
+sudo: false
+
+env:
+  global:
+    - RACKET_DIR=~/racket
+  matrix:
+    - RACKET_VERSION=6.1
+    - RACKET_VERSION=6.1.1
+    - RACKET_VERSION=6.2
+    - RACKET_VERSION=6.3
+    - RACKET_VERSION=6.4
+    - RACKET_VERSION=6.5
+    - RACKET_VERSION=6.6
+    - RACKET_VERSION=6.7
+    - RACKET_VERSION=6.8
+    - RACKET_VERSION=HEAD
+
+matrix:
+  allow_failures:
+    - env: RACKET_VERSION=HEAD
+  fast_finish: true
+
+before_install:
+  - git clone https://github.com/greghendershott/travis-racket.git
+  - cat travis-racket/install-racket.sh | bash # pipe to bash not sh!
+  - export PATH="${RACKET_DIR}/bin:${PATH}"
+  - git clone https://github.com/RenaissanceBug/racket-jwt.git
+
+install:
+
+before_script:
+
+script:
+ - cd ..
+ - raco pkg install --deps search-auto --link net-jwt
+ - raco test -x -p net-jwt
+
+after_script:
