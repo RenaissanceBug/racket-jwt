@@ -3,7 +3,7 @@
 (define collection 'multi)
 
 (define deps '("srfi-lite-lib"
-               "base"
+               ("base" #:version "6.10")
                "typed-racket-lib"
                "typed-racket-more"
                "sha"))
