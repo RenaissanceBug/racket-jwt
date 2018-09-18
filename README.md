@@ -1,5 +1,6 @@
 # net-jwt
 
+![Travis CI](https://travis-ci.org/RenaissanceBug/racket-jwt.svg?branch=master)
 ![LGPL 3.0 license](https://img.shields.io/badge/License-LGPL3.0-blue.svg)
 
 This library implements JSON Web Token (JWT) encoding, decoding, signing,
