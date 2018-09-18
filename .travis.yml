@@ -32,6 +32,6 @@ before_script:
 script:
  - cd racket-jwt
  - raco pkg install --deps search-auto
- - raco test -x -p net-jwt
+ - raco test -x -p racket-jwt
 
 after_script:
