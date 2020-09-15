@@ -289,10 +289,14 @@ names specified in RFC 7519 @cite["RFC7519"].
 
 @defmodule[net/jwt/algorithms]{
   Provides functions related to signing JWTs and verifying JWT signatures.
-  Currently the only supported algorithms are HMAC-SHA256, HMAC-SHA384, and
-  HMAC-SHA512 — via the @racket[sha] package's @racket[hmac-sha256],
-  @racket[hmac-sha384], and @racket[hmac-sha512], respectively — and the
-  no-op algorithm @racket[none] (see RFC7515 Appendix A.5 @cite["RFC7515"]).
+  Currently the only supported algorithms are
+  @itemlist[
+    @item{HMAC-SHA256, HMAC-SHA384, and  HMAC-SHA512 — via the @racket[sha] package's @racket[hmac-sha256],
+          @racket[hmac-sha384], and @racket[hmac-sha512], respectively.}
+    @item{the  no-op algorithm @racket[none] (see RFC7515 Appendix A.5 @cite["RFC7515"]).}
+    @item{RSASSA-PKCS1-v1_5 with the SHA-256, SHA-384 and SHA-512 using the @racket[crypto] package.}
+  ]
+
   Any additional algorithms that may be implemented in future will be
   accessible via a @racket[SigningFunction] defined in this module.
 
