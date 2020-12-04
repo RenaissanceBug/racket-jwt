@@ -6,7 +6,8 @@
                ("base" #:version "6.10")
                "typed-racket-lib"
                "typed-racket-more"
-               "sha"))
+               "sha"
+               "crypto"))
 
 (define build-deps
   '("rackunit-lib" "web-server-lib" "racket-doc" "scribble-lib"

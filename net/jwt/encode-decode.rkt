@@ -59,7 +59,7 @@ Decodes the given Compact JWS Serialization, producing an unverified JWT.
                       (jshash->claims claims) payload-string
                       signature))))
 
-(: verify-jwt (->* (JWT String String)
+(: verify-jwt (->* (JWT String (U String Bytes))
                    (#:aud (Option String)
                     #:iss (Option String)
                     #:clock-skew Exact-Nonnegative-Integer)
@@ -103,7 +103,7 @@ the given secret and is intended for the given audience.
          (ok-signature? sig secret (string-append rh "." payload) sign)
          (verified-jwt header rh claims payload sig))))
 
-(: decode/verify (->* (String String String)
+(: decode/verify (->* (String String (U String Bytes))
                       (#:aud (Option String)
                        #:iss (Option String)
                        #:clock-skew Exact-Nonnegative-Integer)
@@ -213,7 +213,7 @@ the given secret and is intended for the given audience.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Encoding
 
-(: encode/sign (->* (String String)
+(: encode/sign (->* (String (U String Bytes))
                     (#:extra-headers (HashTable Symbol JSExpr)
                      #:iss (Option String)
                      #:sub (Option String)
