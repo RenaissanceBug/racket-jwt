@@ -33,7 +33,7 @@
          current-string-converter
          SigningFunction
          ok-signature?
-         none hs256 hs384 hs512 rs256
+         none hs256 hs384 hs512
          rs256 rs384 rs512
          supported?
          signing-function
